@@ -18,39 +18,47 @@
 
 
 from iterstrat.ml_stratifiers import MultilabelStratifiedShuffleSplit
-import laspy
-#from plyfile import PlyData
+from plyfile import PlyData
 import numpy as np
 import pandas as pd
 import os
 import shutil
 
 # Introduce the path to the .laz files
-os.chdir(r'/home/sara/Desktop/Internship/labelled_pole_dataset-20220117T100957Z-001/Laz/data')
+folder_path = 'KPConv/Data/poles_modified_ply'
 wd = os.getcwd()
 # Extract the name of the .laz files and store in a list
-laz_files = [x for x in os.listdir() if x.endswith('.laz')]
-# Existence matrix generation : which classes exist in each .ply file (1x12 array)? (binary)
-exs = np.zeros((len(laz_files), 12), dtype=int)
-parts=[]
-for i in range(len(laz_files)):
-    cloud = laspy.read(laz_files[i])
-    j=0
-    for m in range(12):
-        bn = m in cloud.label
-        if bn:
-            exs[i,m] = 1
-            j+=1
-        else:
-            exs[i,m] = 0
-        parts.append(j)
-        # print(exs[i])
+ply_files = [x for x in os.listdir(folder_path) if x.endswith('.ply')]
+print(ply_files)
+# Assuming there are 2 possible labels in label_streetlight
+exs = np.zeros((len(ply_files), 2), dtype=int)
+parts = []
+print("ok")
+# Iterate over each ply file
+for i, ply_file in enumerate(ply_files):
+    # Read the PLY file
+    cloud_path = os.path.join(folder_path, ply_file)
+    cloud = PlyData.read(cloud_path)
+    j = 0
+    
+    # Check if 'vertex' element and 'label_streetlight' property exist
+    if 'label_streetlight' in cloud['vertex'].data.dtype.names:
+        label_streetlight = cloud['vertex']['label_streetlight']
+        # Iterate over the possible labels
+        for m in range(2):  # Assuming labels are 0 or 1
+            # Check if the label m is present in label_streetlight
+            bn = np.any(label_streetlight == m)
+            exs[i, m] = int(bn)
+            j += int(bn)
+            
+    parts.append(j)
+    print(exs[i])
 # Preparing the data to be splited (turn lists to arrays)
-X = np.array(laz_files)
+X = np.array(ply_files)
 y = np.array(exs)
-# print(max(parts))
+print(max(parts))
 
-test_size = 0.3
+test_size = 0.2
 # Setting the split parameters
 msss = MultilabelStratifiedShuffleSplit(n_splits=1, test_size=test_size, random_state=36)
 # Storing the split result as an array
@@ -66,17 +74,17 @@ for train_index, test_index in msss.split(X, y):
 # Clean and Create a directory to save training files
 splits = ['train_ply', 'test_ply', 'val_ply']
 for split in splits:
-    if not os.path.exists(split):
-        os.makedirs(split)
-    else:
-        shutil.rmtree(split)
+    if not os.path.exists(os.path.join(folder_path,split)):
+        os.mkdir(os.path.join(folder_path,split))
+    # else:
+    #     shutil.rmtree(os.path.join(folder_path,split))
 # Separate the training files and store it in a separate folder
 for name in X_train:
-    shutil.copy(name, 'train_ply')
+    shutil.copy(os.path.join(folder_path,name), os.path.join(folder_path, 'train_ply'))
 # Split the test data into test and validation set
 exs2=[]
 for name in X_test:
-    exs2.append(exs[laz_files.index(name)])
+    exs2.append(exs[ply_files.index(name)])
 X_test=np.array(X_test)
 y2=np.array(exs2)
 val_size = 0.5
@@ -87,6 +95,6 @@ for test2_index, validation_index in msss2.split(X_test, y2):
     y_test2, y_validation = y2[test2_index], y2[validation_index]
 # Move the files into test and validation folders
 for name in Final_test:
-    shutil.copy(name, 'test_ply')
+    shutil.copy(os.path.join(folder_path,name), os.path.join(folder_path, 'test_ply'))
 for name in validation:
-    shutil.copy(name, 'val_ply')
+    shutil.copy(os.path.join(folder_path,name), os.path.join(folder_path, 'val_ply'))
